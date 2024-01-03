@@ -1,4 +1,4 @@
-package com.heima.wemedia.service;
+package com.heima.wemedia.mapper.service;
 
 
 import com.baomidou.mybatisplus.extension.service.IService;

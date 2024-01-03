@@ -1,13 +1,23 @@
 package com.heima.article.service.impl;
 
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.heima.article.mapper.ApArticleConfigMapper;
+import com.heima.article.mapper.ApArticleContentMapper;
 import com.heima.article.mapper.ApArticleMapper;
 import com.heima.article.service.ApArticleService;
+import com.heima.article.service.ArticleFreemarkerService;
 import com.heima.common.constants.ArticleConstants;
+import com.heima.model.article.dtos.ArticleDto;
 import com.heima.model.article.dtos.ArticleHomeDto;
 import com.heima.model.article.pojos.ApArticle;
+import com.heima.model.article.pojos.ApArticleConfig;
+import com.heima.model.article.pojos.ApArticleContent;
 import com.heima.model.common.dtos.ResponseResult;
+import com.heima.model.common.enums.AppHttpCodeEnum;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.net.nntp.Article;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -53,5 +63,55 @@ public class ApArticleServiceImpl extends ServiceImpl<ApArticleMapper, ApArticle
 
         List<ApArticle> apArticles = apArticleMapper.loadArticleList(articleHomeDto, type);
         return ResponseResult.okResult(apArticles);
+    }
+
+    @Resource
+    private ApArticleContentMapper contentMapper;
+
+    @Resource
+    private ApArticleConfigMapper configMapper;
+
+    @Resource
+    ArticleFreemarkerService articleFreemarkerService;
+    /***
+     * 保存app端的文章
+     * @param articleDto
+     * @return
+     */
+    @Override
+    public ResponseResult saveArticle(ArticleDto articleDto) {
+        //1.校验参数
+        if(articleDto == null){
+            return ResponseResult.errorResult(AppHttpCodeEnum.PARAM_INVALID);
+        }
+        ApArticle article = new ApArticle();
+        BeanUtils.copyProperties(articleDto, article);
+        //2.判断新增还是修改
+        if(articleDto.getId() == null){
+            //新增
+            //插入文章信息（以下三个表均是一对一）
+            save(article);
+            //插入文章配置信息
+            ApArticleConfig apArticleConfig = new ApArticleConfig(article.getId());
+            configMapper.insert(apArticleConfig);
+            //插入文章内容信息
+            ApArticleContent articleContent = new ApArticleContent();
+            articleContent.setContent(articleDto.getContent());
+            articleContent.setArticleId(article.getId());
+            contentMapper.insert(articleContent);
+
+        }else {
+            //修改
+            updateById(article);
+            //修改文章内容表
+            ApArticleContent articleContent = contentMapper.selectOne(Wrappers.<ApArticleContent>lambdaQuery().eq(ApArticleContent::getArticleId, articleDto.getId()));
+            articleContent.setContent(articleDto.getContent());
+            contentMapper.updateById(articleContent);
+//            contentMapper.update(articleContent, Wrappers.<ApArticleContent>lambdaQuery().eq(ApArticleContent::getArticleId, articleDto.getId()));
+        }
+
+        // 保存app文章后,异步生成静态mino文件
+        articleFreemarkerService.buildArticleToMinIO(article, articleDto.getContent());
+        return ResponseResult.okResult(article.getId());
     }
 }

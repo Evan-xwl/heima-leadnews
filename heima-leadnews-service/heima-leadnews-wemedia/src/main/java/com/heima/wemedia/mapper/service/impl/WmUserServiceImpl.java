@@ -1,4 +1,4 @@
-package com.heima.wemedia.service.impl;
+package com.heima.wemedia.mapper.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -8,7 +8,7 @@ import com.heima.model.wemedia.dtos.WmLoginDto;
 import com.heima.model.wemedia.pojos.WmUser;
 import com.heima.utils.common.AppJwtUtil;
 import com.heima.wemedia.mapper.WmUserMapper;
-import com.heima.wemedia.service.WmUserService;
+import com.heima.wemedia.mapper.service.WmUserService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
