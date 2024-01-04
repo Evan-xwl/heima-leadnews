@@ -7,22 +7,29 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.heima.apis.article.IArticleClient;
+import com.heima.apis.schedule.IScheduleClient;
+import com.heima.common.constants.TaskTypeEnum;
 import com.heima.common.constants.WemediaConstants;
 import com.heima.common.exception.CustomException;
 import com.heima.model.article.dtos.ArticleDto;
 import com.heima.model.common.dtos.PageResponseResult;
 import com.heima.model.common.dtos.ResponseResult;
 import com.heima.model.common.enums.AppHttpCodeEnum;
+import com.heima.model.schedule.dtos.Task;
 import com.heima.model.wemedia.dtos.WmNewsDto;
 import com.heima.model.wemedia.dtos.WmNewsPageReqDto;
 import com.heima.model.wemedia.pojos.*;
+import com.heima.utils.common.ProtostuffUtil;
 import com.heima.utils.thread.WmThreadLocalUtil;
 import com.heima.wemedia.mapper.*;
 import com.heima.wemedia.mapper.service.WmNewsAutoScanService;
 import com.heima.wemedia.mapper.service.WmNewsService;
+import com.heima.wemedia.mapper.service.WmNewsTaskService;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -92,6 +99,9 @@ public class WmNewsServiceImpl extends ServiceImpl<WmNewsMapper, WmNews> impleme
     }
 
     @Resource
+    private WmNewsTaskService wmNewsTaskService;
+
+    @Resource
     WmNewsAutoScanService wmNewsAutoScanService;
     @Override
     public ResponseResult submitNews(WmNewsDto dto) {
@@ -129,8 +139,30 @@ public class WmNewsServiceImpl extends ServiceImpl<WmNewsMapper, WmNews> impleme
         saveRelativeInfoForCover(dto, wmNews, materials);
 
         //6.异步审核文章
-        wmNewsAutoScanService.autoScanWmNews(wmNews.getId());
+//        wmNewsAutoScanService.autoScanWmNews(wmNews.getId());
+        wmNewsTaskService.addNewsToTask(wmNews.getId(),wmNews.getPublishTime());
         return ResponseResult.okResult(AppHttpCodeEnum.SUCCESS);
+    }
+
+
+    @Resource
+    private IScheduleClient scheduleClient;
+    @Scheduled(fixedRate = 1000)
+    @Override
+    @SneakyThrows
+    public void scanNewsByTask() {
+        log.info("文章审核---消费任务执行---begin---");
+
+        ResponseResult responseResult = scheduleClient.poll(TaskTypeEnum.NEWS_SCAN_TIME.getTaskType(), TaskTypeEnum.NEWS_SCAN_TIME.getPriority());
+        if(responseResult.getCode().equals(200) && responseResult.getData() != null){
+            String json_str = JSON.toJSONString(responseResult.getData());
+            Task task = JSON.parseObject(json_str, Task.class);
+            byte[] parameters = task.getParameters();
+            WmNews wmNews = ProtostuffUtil.deserialize(parameters, WmNews.class);
+            System.out.println(wmNews.getId()+"-----------");
+            wmNewsAutoScanService.autoScanWmNews(wmNews.getId());
+        }
+        log.info("文章审核---消费任务执行---end---");
     }
 
     /**
